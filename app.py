@@ -5,7 +5,6 @@ import io
 import os
 import sqlite3
 import threading
-import time
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -271,7 +270,7 @@ def cleanup_expired():
 
         for row in rows:
             conn.execute(
-                "UPDATE media_items SET status='expired' WHERE id=?",
+                "DELETE FROM media_items WHERE id=?",
                 (row["id"],),
             )
 
