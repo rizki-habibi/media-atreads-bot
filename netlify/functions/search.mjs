@@ -3,6 +3,47 @@ import jsQR from 'jsqr';
 
 const MAX=12;
 function unesc(s){return s.replace(/\\u0026/g,'&').replace(/&amp;/g,'&').replace(/\\\"/g,'"');}
-function extractImages(html){const out=[];const re=/murl&quot;:&quot;(.*?)&quot;/g;let m;while((m=re.exec(html))&&out.length<MAX){const u=unesc(m[1]);if(/^https?:\\/\\//i.test(u)&&!out.some(x=>x.image===u))out.push({image:u});}return out;}
-async function scan(url){try{const r=await fetch(url,{headers:{'user-agent':'Mozilla/5.0 Atreads/3.0'},signal:AbortSignal.timeout(8000)});if(!r.ok)return null;const type=r.headers.get('content-type')||'';if(!type.startsWith('image/'))return null;const b=Buffer.from(await r.arrayBuffer());if(b.length>8*1024*1024)return null;const {data,info}=await sharp(b).rotate().ensureAlpha().raw().toBuffer({resolveWithObject:true});const code=jsQR(new Uint8ClampedArray(data),info.width,info.height,{inversionAttempts:'attemptBoth'});return code?.data||null}catch{return null}}
-export default async (req)=>{try{const q=new URL(req.url).searchParams.get('q')?.trim()||'ShopeePay QR barcode';const u='https://www.bing.com/images/search?q='+encodeURIComponent(q);const r=await fetch(u,{headers:{'user-agent':'Mozilla/5.0 Atreads/3.0'},signal:AbortSignal.timeout(10000)});if(!r.ok)return new Response(JSON.stringify({error:'Image search provider returned '+r.status}),{status:502,headers:{'content-type':'application/json'}});const html=await r.text();const items=extractImages(html);const results=[];let scanned=0;for(const item of items){const qr=await scan(item.image);if(qr!==null)scanned++;results.push({...item,source:'Bing Images',qr,shopeePay:!!qr&&/shopee|shopeepay/i.test(qr),title:q,page:null});}return new Response(JSON.stringify({query:q,scanned,results}),{headers:{'content-type':'application/json','cache-control':'no-store'}})}catch(e){return new Response(JSON.stringify({error:e.message||'Search failed'}),{status:500,headers:{'content-type':'application/json'}})}};
+function extractImages(html){
+  const out=[];
+  const patterns=[/"murl":"(.*?)"/g,/murl&quot;:&quot;(.*?)&quot;/g];
+  for(const re of patterns){
+    let m;
+    while((m=re.exec(html))&&out.length<MAX){
+      const u=unesc(m[1]);
+      if((u.startsWith('http://')||u.startsWith('https://'))&&!out.some(x=>x.image===u))out.push({image:u});
+    }
+  }
+  return out;
+}
+async function scan(url){
+  try{
+    const r=await fetch(url,{headers:{'user-agent':'Mozilla/5.0 Atreads/3.0'},signal:AbortSignal.timeout(8000)});
+    if(!r.ok)return null;
+    const type=r.headers.get('content-type')||'';
+    if(!type.startsWith('image/'))return null;
+    const b=Buffer.from(await r.arrayBuffer());
+    if(b.length>8*1024*1024)return null;
+    const {data,info}=await sharp(b).rotate().ensureAlpha().raw().toBuffer({resolveWithObject:true});
+    const code=jsQR(new Uint8ClampedArray(data),info.width,info.height,{inversionAttempts:'attemptBoth'});
+    return code?.data||null;
+  }catch{return null}
+}
+export default async (req)=>{
+  try{
+    const q=new URL(req.url).searchParams.get('q')?.trim()||'ShopeePay QR barcode';
+    const u='https://www.bing.com/images/search?q='+encodeURIComponent(q);
+    const r=await fetch(u,{headers:{'user-agent':'Mozilla/5.0 Atreads/3.0'},signal:AbortSignal.timeout(10000)});
+    if(!r.ok)return new Response(JSON.stringify({error:'Image search provider returned '+r.status}),{status:502,headers:{'content-type':'application/json'}});
+    const html=await r.text();
+    const items=extractImages(html);
+    const results=[];let scanned=0;
+    for(const item of items){
+      const qr=await scan(item.image);
+      if(qr!==null)scanned++;
+      results.push({...item,source:'Bing Images',qr,shopeePay:!!qr&&/shopee|shopeepay/i.test(qr),title:q,page:null});
+    }
+    return new Response(JSON.stringify({query:q,scanned,results}),{headers:{'content-type':'application/json','cache-control':'no-store'}});
+  }catch(e){
+    return new Response(JSON.stringify({error:e.message||'Search failed'}),{status:500,headers:{'content-type':'application/json'}});
+  }
+};
