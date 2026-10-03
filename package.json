@@ -1,0 +1,1 @@
+{"name":"media-atreads-bot-netlify","private":true,"version":"3.0.0","type":"module","scripts":{"dev":"netlify dev"},"dependencies":{"jsqr":"^1.4.0","sharp":"^0.34.3"}}
